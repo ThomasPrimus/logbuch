@@ -187,6 +187,17 @@ export function buildDays(data, settings) {
     if (r.firstMeal != null && before?.lastMeal != null) r.fastHours = 24 - before.lastMeal + r.firstMeal;
   }
 
+  // Fasten-Timer: zählt für den Tag, an dem das Fasten endet, und geht den Fotos vor
+  for (const f of data.fasts || []) {
+    if (!f.ended_at) continue;
+    const hoursFasted = (new Date(f.ended_at) - new Date(f.started_at)) / 3600000;
+    const r = get(dayKey(f.ended_at));
+    if (r.fastTimer != null && r.fastTimer >= hoursFasted) continue; // das längste Fasten des Tages gilt
+    r.fastTimer = hoursFasted;
+    r.fastHours = hoursFasted;
+    r.fasting = hoursFasted >= Number(f.target_hours) ? 1 : 0;
+  }
+
   const cravingDays = new Set();
   const itchDays = new Set();
   for (const e of data.events || []) {

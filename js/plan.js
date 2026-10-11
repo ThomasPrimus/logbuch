@@ -164,3 +164,24 @@ export const avg = (values) => {
 
 const STRENGTH = /weight|strength|functional|powerlifting|kraft/i;
 export const isStrength = (w) => STRENGTH.test(w.sport_name || "");
+
+/**
+ * Stand eines Fastens zu einem Zeitpunkt. Läuft es noch, zählt `now`, sonst das
+ * Ende. Alle Zeiten in Minuten.
+ */
+export function fastStatus(fast, now = new Date()) {
+  const start = new Date(fast.started_at).getTime();
+  const end = fast.ended_at ? new Date(fast.ended_at).getTime() : new Date(now).getTime();
+  const targetMin = Math.round(Number(fast.target_hours) * 60);
+  const elapsedMin = Math.max(0, Math.floor((end - start) / 60000));
+  return {
+    running: !fast.ended_at,
+    elapsedMin,
+    targetMin,
+    remainingMin: Math.max(0, targetMin - elapsedMin),
+    overMin: Math.max(0, elapsedMin - targetMin),
+    reached: elapsedMin >= targetMin,
+    share: targetMin ? Math.min(1, elapsedMin / targetMin) : 0,
+    goalAt: new Date(start + targetMin * 60000),
+  };
+}

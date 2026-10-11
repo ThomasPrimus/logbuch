@@ -2,8 +2,8 @@
 
 import { analyzeMeal, dayBand, eventRow, eventSheet, mealDetailSheet, mealRow, newMealSheet, photoButton } from "../components.js";
 import { api, loadRange } from "../data.js";
-import { addDays, dayKey, field, fmt, h, icon, openSheet, segmented, toast, mount } from "../lib.js";
-import { dayTotals, inWindow, kcalTarget, targetWeight, weightSeries, windowStatus } from "../plan.js";
+import { addDays, dayKey, field, fmt, h, icon, localInputValue, openSheet, segmented, toast, mount } from "../lib.js";
+import { dayTotals, fastStatus, inWindow, kcalTarget, targetWeight, weightSeries, windowStatus } from "../plan.js";
 import { BREAKFAST_BEFORE } from "../stats.js";
 
 const CRAVING_KEY = "suesslust-timer";
@@ -31,12 +31,13 @@ function writeTimer(t) {
 export async function renderToday(root, ctx) {
   const today = dayKey();
   const s = ctx.settings;
-  const [range, recent, dishes, supplements, supLogs] = await Promise.all([
+  const [range, recent, dishes, supplements, supLogs, lastFasts] = await Promise.all([
     loadRange(today, addDays(today, 1)),
     loadRange(addDays(today, -14), addDays(today, 1)),
     api.select("dishes", { gte: { cooked_on: addDays(today, -3) }, order: "cooked_on" }),
     api.select("supplements", { eq: { active: true }, order: "name", asc: true }),
     api.select("supplement_logs", { eq: { day: today } }),
+    api.select("fasts", { order: "started_at", limit: 5 }),
   ]);
   const rerender = () => ctx.refresh();
   const { meals, events } = range;
@@ -66,6 +67,125 @@ export async function renderToday(root, ctx) {
   };
   paintBand();
   const tick = setInterval(() => (document.body.contains(statusEl) ? paintBand() : clearInterval(tick)), 30000);
+
+  // ------------------------------------------------------- Fasten-Timer
+  // Von Hand gestartet und beendet. Zeigt, wie lange das Fasten läuft und wie
+  // weit es noch bis zum eingestellten Ziel ist.
+  const activeFast = lastFasts.find((f) => !f.ended_at) || null;
+  const lastDone = lastFasts.find((f) => f.ended_at) || null;
+  const defaultTarget = Number(s.fast_target_hours) || 18;
+  const fastHost = h("section", { class: "panel fast", "aria-label": "Fasten-Timer" });
+  const hoursLabel = (v) => `${fmt.n1(Number(v)).replace(",0", "")} h`;
+  const clockOf = (d) => `${fmt.time(d)} Uhr`;
+  const dayWord = (d) => (dayKey(d) === today ? "heute" : dayKey(d) === addDays(today, -1) ? "gestern" : dayKey(d) === addDays(today, 1) ? "morgen" : fmt.dayShort(d));
+  const run = async (fn, okMessage) => {
+    try {
+      await fn();
+      if (okMessage) toast(okMessage);
+      rerender();
+    } catch (err) {
+      toast(`Speichern fehlgeschlagen: ${err.message}`);
+    }
+  };
+
+  const targetPicker = (current, onPick) => {
+    const presets = [14, 16, 18, 20];
+    const custom = h("input", { id: "fast-target", type: "number", inputmode: "decimal", min: "1", max: "72", step: "0.5", value: presets.includes(current) ? "" : String(current), placeholder: "andere" });
+    custom.addEventListener("change", () => {
+      const v = Number(String(custom.value).replace(",", "."));
+      if (v >= 1 && v <= 72) onPick(Math.round(v * 2) / 2);
+      else toast("Bitte eine Dauer zwischen 1 und 72 Stunden eingeben.");
+    });
+    return h(
+      "div",
+      { class: "fast-target" },
+      segmented(presets.map((v) => [v, `${v} h`]), presets.includes(current) ? current : null, onPick),
+      h("label", { class: "fast-custom" }, h("span", { class: "small muted" }, "oder"), custom, h("span", { class: "small muted" }, "Stunden")),
+    );
+  };
+
+  const startFast = (startedAt, target) =>
+    run(async () => {
+      const session = await api.session();
+      await api.insert("fasts", { user_id: session.user.id, started_at: new Date(startedAt).toISOString(), target_hours: target });
+    }, "Fasten gestartet");
+
+  const fastSheet = (fast) =>
+    openSheet(fast ? "Fasten anpassen" : "Fasten nachtragen", (close) => {
+      const draft = { start: localInputValue(fast ? new Date(fast.started_at) : new Date()), target: fast ? Number(fast.target_hours) : defaultTarget };
+      const save = h("button", { class: "btn primary big", type: "button" }, fast ? "Änderungen speichern" : "Fasten ab dieser Zeit starten");
+      save.addEventListener("click", () => {
+        const start = new Date(draft.start);
+        if (isNaN(start) || start > new Date()) return toast("Der Beginn muss in der Vergangenheit liegen.");
+        close();
+        if (fast) run(() => api.update("fasts", fast.id, { started_at: start.toISOString(), target_hours: draft.target }), "Fasten angepasst");
+        else startFast(start, draft.target);
+      });
+      let armed = false;
+      const discard = h("button", { class: "btn quiet danger", type: "button" }, "Dieses Fasten verwerfen");
+      discard.addEventListener("click", () => {
+        if (!armed) {
+          armed = true;
+          discard.textContent = "Wirklich verwerfen? Noch einmal tippen";
+          return;
+        }
+        close();
+        run(() => api.remove("fasts", fast.id), "Fasten verworfen");
+      });
+      return [
+        field("Beginn", h("input", { id: "fast-start", type: "datetime-local", value: draft.start, max: localInputValue(), oninput: (e) => (draft.start = e.target.value) }), "letzte Mahlzeit"),
+        h("div", { class: "field" }, h("span", {}, "Ziel"), targetPicker(draft.target, (v) => (draft.target = v))),
+        save,
+        fast ? discard : null,
+      ];
+    });
+
+  const paintFast = () => {
+    if (!activeFast) {
+      const last = lastDone ? fastStatus(lastDone) : null;
+      fastHost.replaceChildren(
+        h("div", { class: "section-title" }, h("h2", {}, "Fasten"), h("span", { class: "small muted" }, `Ziel ${hoursLabel(defaultTarget)}`)),
+        last
+          ? h("p", { class: "muted" }, `Letztes Fasten: ${fmt.duration(last.elapsedMin)}, beendet ${dayWord(new Date(lastDone.ended_at))} um ${clockOf(lastDone.ended_at)}${last.reached ? ", Ziel erreicht" : `, Ziel von ${hoursLabel(lastDone.target_hours)} nicht erreicht`}.`)
+          : h("p", { class: "muted" }, "Starte den Timer nach deiner letzten Mahlzeit und beende ihn, wenn du wieder isst."),
+        targetPicker(defaultTarget, (v) => ctx.saveSettings({ fast_target_hours: v })),
+        h("button", { class: "btn primary big", type: "button", onclick: () => startFast(new Date(), defaultTarget) }, "Fasten jetzt starten"),
+        h("button", { class: "btn quiet", type: "button", onclick: () => fastSheet(null) }, "Ich faste schon länger: Beginn nachtragen"),
+      );
+      return;
+    }
+    const st = fastStatus(activeFast);
+    fastHost.replaceChildren(
+      h("div", { class: "section-title" }, h("h2", {}, "Fasten läuft"), h("span", { class: "small muted" }, `seit ${dayWord(new Date(activeFast.started_at))} ${clockOf(activeFast.started_at)}`)),
+      h("div", { class: "fast-elapsed num", role: "timer", "aria-label": `Gefastet: ${fmt.duration(st.elapsedMin)}` }, fmt.duration(st.elapsedMin)),
+      h(
+        "p",
+        { class: "num" },
+        st.reached
+          ? `Ziel von ${hoursLabel(activeFast.target_hours)} erreicht${st.overMin ? `, ${fmt.duration(st.overMin)} darüber` : ""}.`
+          : `Noch ${fmt.duration(st.remainingMin)} bis zum Ziel von ${hoursLabel(activeFast.target_hours)}, erreicht ${dayWord(st.goalAt)} um ${clockOf(st.goalAt)}.`,
+      ),
+      h("div", { class: "meter" }, h("div", { class: "track", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round(st.share * 100)) }, h("div", { class: `fill${st.reached ? " done" : ""}`, style: `width:${Math.round(st.share * 100)}%` }))),
+      h(
+        "div",
+        { class: "row" },
+        h(
+          "button",
+          {
+            class: "btn primary grow",
+            type: "button",
+            onclick: () => run(() => api.update("fasts", activeFast.id, { ended_at: new Date().toISOString() }), `Fasten beendet nach ${fmt.duration(fastStatus(activeFast).elapsedMin)}`),
+          },
+          "Fasten beenden",
+        ),
+        h("button", { class: "btn", type: "button", onclick: () => fastSheet(activeFast) }, "Anpassen"),
+      ),
+    );
+  };
+  paintFast();
+  if (activeFast) {
+    const fastTick = setInterval(() => (document.body.contains(fastHost) ? (document.querySelector(".sheet-back") ? null : paintFast()) : clearInterval(fastTick)), 20000);
+  }
 
   // ------------------------------------------------------- Süßlust-Timer
   const timerHost = h("div", {});
@@ -240,7 +360,8 @@ export async function renderToday(root, ctx) {
   };
   const mealHours = meals.map((m) => new Date(m.eaten_at)).map((d) => d.getHours() + d.getMinutes() / 60);
   const derivedBreakfast = meals.length ? Math.min(...mealHours) < BREAKFAST_BEFORE : null;
-  const derivedFasting = meals.length ? meals.every((m) => inWindow(s, m.eaten_at)) : null;
+  const endedToday = lastFasts.find((f) => f.ended_at && dayKey(f.ended_at) === today);
+  const derivedFasting = endedToday ? fastStatus(endedToday).reached : meals.length ? meals.every((m) => inWindow(s, m.eaten_at)) : null;
   const checkPanel = h(
     "div",
     { class: "panel" },
@@ -249,7 +370,7 @@ export async function renderToday(root, ctx) {
     scale("Juckende Hautstellen im Gesicht", "itch", "keine"),
     scale("Trockene Haut", "dry_skin", "nein"),
     yesNo("Gefrühstückt", "breakfast", derivedBreakfast, `etwas mit Kalorien vor ${BREAKFAST_BEFORE} Uhr`),
-    yesNo("Essensfenster eingehalten", "fasting", derivedFasting, `nur zwischen ${String(s.window_start).slice(0, 5)} und ${String(s.window_end).slice(0, 5)} Uhr gegessen`),
+    yesNo("Fastenziel erreicht", "fasting", derivedFasting, "wird vom Fasten-Timer übernommen"),
   );
 
   // --------------------------------------------------------- Supplements
@@ -329,7 +450,9 @@ export async function renderToday(root, ctx) {
       h(
         "div",
         { class: "stack" },
-        h("section", { class: "band-wrap", "aria-label": "Essensfenster" }, statusEl, bandHost),
+        fastHost,
+        // Wer den Timer nutzt, steuert das Fasten selbst: dann zeigt das Band nur noch den Tag
+        h("section", { class: "band-wrap", "aria-label": "Tagesband" }, lastFasts.length ? null : statusEl, bandHost),
         timerHost,
         capture,
         h(

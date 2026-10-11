@@ -72,6 +72,7 @@ const live = {
       for (const [k, v] of Object.entries(q.eq || {})) r = r.eq(k, v);
       for (const [k, v] of Object.entries(q.gte || {})) r = r.gte(k, v);
       for (const [k, v] of Object.entries(q.lt || {})) r = r.lt(k, v);
+      for (const [k, v] of Object.entries(q.is || {})) r = r.is(k, v);
       if (q.order) r = r.order(q.order, { ascending: !!q.asc });
       return r;
     };
@@ -188,7 +189,7 @@ function demoSeed() {
     if (strength) workouts.push({ id: uid(), start_at: at(-i, 8, 0), sport_name: "weightlifting", strain: 9.4 });
   }
   return {
-    settings: [{ user_id: "demo", start_weight_kg: 90, goal_weight_kg: 84, rate_kg_per_week: 0.5, plan_start: addDays(today, -13), pause_from: addDays(today, 60), pause_weeks: 4, window_start: "11:00", window_end: "19:00", protein_target_g: 150, kcal_target: null, timezone: "Europe/Berlin" }],
+    settings: [{ user_id: "demo", fast_target_hours: 16, start_weight_kg: 90, goal_weight_kg: 84, rate_kg_per_week: 0.5, plan_start: addDays(today, -13), pause_from: addDays(today, 60), pause_weeks: 4, window_start: "11:00", window_end: "19:00", protein_target_g: 150, kcal_target: null, timezone: "Europe/Berlin" }],
     meals: [
       meal(0, 11, 20, "Rührei mit Gemüse und Reis", 610, 41, "niedrig"),
       meal(0, 14, 45, "Hähnchen, Ofengemüse, Kartoffeln", 720, 58, "niedrig", [], "koch"),
@@ -216,6 +217,11 @@ function demoSeed() {
       { id: uid(), name: "Vitamin D3 + K2", brand: "Beispiel", dose_text: "1 Tropfen morgens", unit: "Tropfen", units_per_day: 1, ingredients: [{ name: "Vitamin D3", amount: 25, unit: "µg" }], additives: [], active: true, status: "done" },
     ],
     supplement_logs: [],
+    fasts: [
+      { id: uid(), started_at: at(-3, 19, 30), ended_at: at(-2, 12, 0), target_hours: 16 },
+      { id: uid(), started_at: at(-2, 18, 20), ended_at: at(-1, 11, 5), target_hours: 18 },
+      { id: uid(), started_at: at(-1, 21, 35), ended_at: at(0, 11, 20), target_hours: 16 },
+    ],
     dishes: [],
     labs: [],
     sync_state: [],
@@ -245,6 +251,7 @@ const demo = {
     for (const [k, v] of Object.entries(q.eq || {})) rows = rows.filter((r) => r[k] === v);
     for (const [k, v] of Object.entries(q.gte || {})) rows = rows.filter((r) => r[k] >= v);
     for (const [k, v] of Object.entries(q.lt || {})) rows = rows.filter((r) => r[k] < v);
+    for (const [k, v] of Object.entries(q.is || {})) rows = rows.filter((r) => (r[k] ?? null) === v);
     if (q.order) rows.sort((a, b) => (a[q.order] < b[q.order] ? -1 : a[q.order] > b[q.order] ? 1 : 0) * (q.asc ? 1 : -1));
     if (q.limit) rows = rows.slice(0, q.limit);
     return rows;
@@ -336,13 +343,16 @@ export async function saveSettings(patch) {
 export async function loadRange(fromDay, toDayExclusive) {
   const from = new Date(`${fromDay}T00:00:00`).toISOString();
   const to = new Date(`${toDayExclusive}T00:00:00`).toISOString();
-  const [meals, events, checkins, weights, whoop, workouts] = await Promise.all([
+  // Ein Fasten, das am Vorabend begonnen hat, gehört zum Tag, an dem es endet
+  const fastFrom = new Date(new Date(`${fromDay}T00:00:00`).getTime() - 3 * 86400000).toISOString();
+  const [meals, events, checkins, weights, whoop, workouts, fasts] = await Promise.all([
     api.select("meals", { gte: { eaten_at: from }, lt: { eaten_at: to }, order: "eaten_at", asc: true }),
     api.select("events", { gte: { occurred_at: from }, lt: { occurred_at: to }, order: "occurred_at", asc: true }),
     api.select("checkins", { gte: { day: fromDay }, lt: { day: toDayExclusive }, order: "day", asc: true }),
     api.select("weights", { gte: { day: fromDay }, lt: { day: toDayExclusive }, order: "day", asc: true }),
     api.select("whoop_daily", { gte: { day: fromDay }, lt: { day: toDayExclusive }, order: "day", asc: true }),
     api.select("whoop_workouts", { gte: { start_at: from }, lt: { start_at: to }, order: "start_at", asc: true }),
+    api.select("fasts", { gte: { started_at: fastFrom }, lt: { started_at: to }, order: "started_at", asc: true }),
   ]);
-  return { meals, events, checkins, weights, whoop, workouts };
+  return { meals, events, checkins, weights, whoop, workouts, fasts };
 }
