@@ -1,6 +1,7 @@
 // Mehr: Supplements, Gerichte vom Koch, Laborwerte, Plan, Verbindungen.
 
 import { photoButton } from "../components.js";
+import { WHOOP_CLIENT_ID } from "../config.js";
 import { api, photoUrl } from "../data.js";
 import { dayKey, dayStart, field, fmt, h, icon, openSheet, toast, mount } from "../lib.js";
 import { goalDay } from "../plan.js";
@@ -628,18 +629,33 @@ export async function renderConnections(root, ctx, query) {
       h("button", { class: "btn quiet", type: "button", onclick: () => saveSecret([["WHOOP_CLIENT_ID", ""], ["WHOOP_CLIENT_SECRET", ""]], "Zugangsdaten entfernt") }, "Zugangsdaten neu eingeben"),
     ];
   } else {
-    const st = { id: "", secret: "" };
+    const st = { id: WHOOP_CLIENT_ID || "", secret: "" };
+    const portal = WHOOP_CLIENT_ID ? `https://developer-dashboard.whoop.com/apps/${WHOOP_CLIENT_ID}` : "https://developer-dashboard.whoop.com";
+    const intro = WHOOP_CLIENT_ID
+      ? [
+          h("p", {}, "Die App ist bei Whoop schon registriert. Es fehlt nur noch ihr geheimer Schlüssel, das Client Secret."),
+          h(
+            "ol",
+            { class: "stack small", style: "padding-left:1.2rem;margin:0" },
+            h("li", {}, "Öffne ", h("a", { href: portal, target: "_blank", rel: "noopener" }, "die App im Whoop-Entwicklerportal"), "."),
+            h("li", {}, "Klicke unter Client Secret auf das Auge, markiere den Schlüssel und kopiere ihn."),
+            h("li", {}, "Füge ihn hier ein und speichere."),
+          ),
+        ]
+      : [
+          h("p", {}, "Whoop gibt Daten nur an eine eigene, bei Whoop angemeldete App heraus. Das Anlegen dauert ein paar Minuten und ist einmalig."),
+          h(
+            "ol",
+            { class: "stack small", style: "padding-left:1.2rem;margin:0" },
+            h("li", {}, "Öffne ", h("a", { href: portal, target: "_blank", rel: "noopener" }, "das Whoop-Entwicklerportal"), ", melde dich mit deinem Whoop-Konto an und lege eine App an."),
+            h("li", {}, "Trage dort als Redirect URL genau diese Adresse ein:", copyLine(status.whoop_redirect_uri)),
+            h("li", {}, "Wähle alle Lese-Berechtigungen (read:…)."),
+            h("li", {}, "Kopiere Client ID und Client Secret in die beiden Felder."),
+          ),
+        ];
     whoop = [
-      h("p", {}, "Whoop gibt Daten nur an eine eigene, bei Whoop angemeldete App heraus. Das Anlegen dauert ein paar Minuten und ist einmalig."),
-      h(
-        "ol",
-        { class: "stack small", style: "padding-left:1.2rem;margin:0" },
-        h("li", {}, "Öffne ", h("a", { href: "https://developer.whoop.com", target: "_blank", rel: "noopener" }, "developer.whoop.com"), ", melde dich mit deinem Whoop-Konto an und lege im Developer Dashboard eine App an."),
-        h("li", {}, "Trage dort als Redirect URI genau diese Adresse ein:", copyLine(status.whoop_redirect_uri)),
-        h("li", {}, "Wähle alle Lese-Berechtigungen (read:…) und zusätzlich „offline“."),
-        h("li", {}, "Kopiere Client ID und Client Secret in die beiden Felder."),
-      ),
-      field("Client ID", h("input", { id: "whoop-id", type: "text", autocomplete: "off", oninput: (e) => (st.id = e.target.value) })),
+      intro,
+      WHOOP_CLIENT_ID ? null : field("Client ID", h("input", { id: "whoop-id", type: "text", autocomplete: "off", oninput: (e) => (st.id = e.target.value) })),
       field("Client Secret", h("input", { id: "whoop-secret", type: "password", autocomplete: "off", oninput: (e) => (st.secret = e.target.value) })),
       h(
         "button",
@@ -647,11 +663,11 @@ export async function renderConnections(root, ctx, query) {
           class: "btn primary",
           type: "button",
           onclick: () => {
-            if (!st.id.trim() || !st.secret.trim()) return toast("Bitte beide Werte eintragen.");
-            saveSecret([["WHOOP_CLIENT_ID", st.id], ["WHOOP_CLIENT_SECRET", st.secret]], "Zugangsdaten gespeichert");
+            if (!st.id.trim() || !st.secret.trim()) return toast(WHOOP_CLIENT_ID ? "Bitte das Client Secret einfügen." : "Bitte beide Werte eintragen.");
+            saveSecret([["WHOOP_CLIENT_ID", st.id], ["WHOOP_CLIENT_SECRET", st.secret]], "Schlüssel gespeichert");
           },
         },
-        "Zugangsdaten speichern",
+        "Schlüssel speichern",
       ),
     ];
   }
