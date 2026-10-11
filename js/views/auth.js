@@ -47,7 +47,7 @@ export function renderAuth(root) {
       if (!needEmail()) return;
       await api.sendLink(st.email);
       pasteBox.hidden = false;
-      say("Die E-Mail ist unterwegs. Kopiere den Link daraus und füge ihn unten ein, statt ihn anzutippen.");
+      say("Die E-Mail ist unterwegs. Tippe den Link darin auf diesem Gerät an. Öffnet sich danach nicht die App, kopiere den Link und füge ihn unten ein.");
     }),
   );
   const useLink = h("button", { class: "btn primary", type: "button" }, "Mit dem Link anmelden");
@@ -58,7 +58,7 @@ export function renderAuth(root) {
     }),
   );
   pasteBox.append(
-    field("Link aus der E-Mail", h("textarea", { id: "auth-link", placeholder: "https://…", oninput: (e) => (st.pasted = e.target.value) }), "lange drücken, kopieren, hier einfügen"),
+    field("Link aus der E-Mail", h("textarea", { id: "auth-link", placeholder: "https://…", oninput: (e) => (st.pasted = e.target.value) }), "nur falls das Antippen nicht in die App führt"),
     useLink,
   );
 
