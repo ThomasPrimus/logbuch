@@ -399,8 +399,11 @@ export function eventSheet(existing, type, onChanged) {
   });
 }
 
-export function photoButton(label, onFile, { capture = true, big = true, accept = "image/*" } = {}) {
-  const input = h("input", {
+/** Geräte mit Fingerbedienung öffnen über das Dateifeld direkt die Kamera. */
+const touchDevice = () => window.matchMedia("(pointer: coarse)").matches;
+
+function fileInput(onFile, accept, capture) {
+  return h("input", {
     type: "file",
     accept,
     capture: capture ? "environment" : null,
@@ -411,5 +414,67 @@ export function photoButton(label, onFile, { capture = true, big = true, accept 
       if (file) onFile(file);
     },
   });
-  return h("label", { class: `btn primary${big ? " big" : ""}` }, icon("camera"), label, input);
+}
+
+/**
+ * Knopf zum Aufnehmen oder Auswählen eines Fotos. Am Handy öffnet er die
+ * Kamera. Am Computer öffnet er die Webcam und bietet daneben die Dateiauswahl
+ * an, weil das Dateifeld dort keine Kamera kennt.
+ */
+export function photoButton(label, onFile, { capture = true, big = true, accept = "image/*" } = {}) {
+  const cls = `btn primary${big ? " big" : ""}`;
+  if (!capture || touchDevice() || !navigator.mediaDevices?.getUserMedia) {
+    return h("label", { class: cls }, icon("camera"), label, fileInput(onFile, accept, capture));
+  }
+  return h("button", { class: cls, type: "button", onclick: () => cameraSheet(onFile, accept) }, icon("camera"), label);
+}
+
+function cameraSheet(onFile, accept) {
+  let stream = null;
+  const stop = () => stream?.getTracks().forEach((t) => t.stop());
+  openSheet(
+    "Foto aufnehmen",
+    (close) => {
+      const video = h("video", { class: "preview", autoplay: true, playsinline: true, muted: true });
+      const status = h("p", { class: "muted" }, "Die Kamera wird gestartet …");
+      const shoot = h("button", { class: "btn primary big", type: "button", disabled: true }, icon("camera"), "Auslösen");
+      const pick = h("label", { class: "btn" }, "Stattdessen ein Bild vom Computer wählen", fileInput((file) => (close(), onFile(file)), accept, false));
+
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
+        .then((s) => {
+          stream = s;
+          if (!document.body.contains(video)) return stop();
+          video.srcObject = s;
+          status.textContent = "Halte das Essen oder die Packung vor die Kamera.";
+          shoot.disabled = false;
+        })
+        .catch((err) => {
+          video.hidden = true;
+          shoot.hidden = true;
+          status.textContent =
+            err?.name === "NotAllowedError"
+              ? "Der Browser hat keinen Zugriff auf die Kamera. Erlaube ihn in der Adresszeile oder wähle ein Bild vom Computer."
+              : "Hier wurde keine Kamera gefunden. Wähle ein Bild vom Computer oder nimm das Foto mit dem Handy auf.";
+        });
+
+      shoot.addEventListener("click", () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return toast("Das Foto konnte nicht aufgenommen werden.");
+            close();
+            onFile(new File([blob], `foto-${Date.now()}.jpg`, { type: "image/jpeg" }));
+          },
+          "image/jpeg",
+          0.9,
+        );
+      });
+      return [video, status, shoot, pick];
+    },
+    { onClose: stop },
+  );
 }

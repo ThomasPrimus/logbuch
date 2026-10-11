@@ -105,12 +105,16 @@ export function toast(message) {
 }
 
 /** Öffnet ein Blatt von unten. `build(close)` liefert den Inhalt. */
-export function openSheet(title, build) {
+export function openSheet(title, build, { onClose } = {}) {
   const prev = document.activeElement;
   const back = h("div", { class: "sheet-back" });
+  let closed = false;
   const close = () => {
+    if (closed) return;
+    closed = true;
     back.remove();
     document.removeEventListener("keydown", onKey);
+    onClose?.();
     prev?.focus?.();
   };
   const onKey = (e) => e.key === "Escape" && close();
