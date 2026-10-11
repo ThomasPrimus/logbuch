@@ -2,6 +2,7 @@
 
 import { loadRange } from "../data.js";
 import { addDays, dayKey, dayStart, daysBetween, fmt, h, mount } from "../lib.js";
+import { subnav } from "./kpis.js";
 import { avg, dayTotals, goalDay, groupBy, inWindow, isStrength, skinPatterns, targetWeight, weightSeries } from "../plan.js";
 
 /** Liniendiagramm mit zwei Reihen, Fadenkreuz und Tooltip. Eine gemeinsame Achse. */
@@ -247,6 +248,7 @@ export async function renderInsights(root, ctx) {
 
   mount(root,
     h("header", { class: "page-head" }, h("h1", {}, "Auswertung"), ctx.demo ? h("span", { class: "pill plain" }, "Vorschau mit Beispieldaten") : null),
+    subnav("auswertung"),
     h("div", { class: "cols" }, h("div", { class: "stack" }, weightPanel, skinPanel), h("div", { class: "stack" }, weekPanel, cravingPanel)),
   );
 }

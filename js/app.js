@@ -5,6 +5,7 @@ import { h, icon, toast } from "./lib.js";
 import { renderAuth } from "./views/auth.js";
 import { renderHistory } from "./views/history.js";
 import { renderInsights } from "./views/insights.js";
+import { renderKpis, renderRelations } from "./views/kpis.js";
 import { renderConnections, renderDishes, renderLabs, renderMore, renderPlan, renderSupplements } from "./views/more.js";
 import { renderToday } from "./views/today.js";
 
@@ -12,6 +13,8 @@ const ROUTES = {
   heute: [renderToday, "heute"],
   verlauf: [renderHistory, "verlauf"],
   auswertung: [renderInsights, "auswertung"],
+  kennzahlen: [renderKpis, "auswertung"],
+  zusammenhaenge: [renderRelations, "auswertung"],
   mehr: [renderMore, "mehr"],
   supplements: [renderSupplements, "mehr"],
   gerichte: [renderDishes, "mehr"],

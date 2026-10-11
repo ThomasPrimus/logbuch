@@ -972,3 +972,122 @@ th.r {
   font-weight: 600;
   line-height: 1.25;
 }
+
+/* ------------------------------------------------ Kennzahlen, Zusammenhänge */
+.subnav {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.subnav a {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.subnav a[aria-current="page"] {
+  background: var(--sea);
+  border-color: var(--sea);
+  color: var(--sea-ink);
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.filters .seg {
+  max-width: 360px;
+}
+
+.tiles {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+
+.tile {
+  gap: 6px;
+}
+
+.tile-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.tile-value {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.tile-delta {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  min-height: 1.6rem;
+}
+
+.rels {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-items: start;
+}
+
+.rel .chart {
+  max-width: 420px;
+}
+
+.statement-s {
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.pairbars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.pairbar-label {
+  font-size: 0.875rem;
+}
+
+.pairbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s3);
+  align-items: center;
+}
+
+.pairbar-track {
+  height: 14px;
+}
+
+.pairbar-fill {
+  height: 100%;
+  background: var(--c1);
+  border-radius: 0 4px 4px 0;
+}
+
+.pairbar-value {
+  font-weight: 600;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5rem;
+  text-align: right;
+}

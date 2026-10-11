@@ -14,6 +14,8 @@ function check({ data, error }) {
 }
 
 // ------------------------------------------------------------------ Supabase
+const PAGE = 1000;
+
 const live = {
   async session() {
     const { data } = await sb.auth.getSession();
@@ -65,13 +67,23 @@ const live = {
   },
 
   async select(table, q = {}) {
-    let r = sb.from(table).select("*");
-    for (const [k, v] of Object.entries(q.eq || {})) r = r.eq(k, v);
-    for (const [k, v] of Object.entries(q.gte || {})) r = r.gte(k, v);
-    for (const [k, v] of Object.entries(q.lt || {})) r = r.lt(k, v);
-    if (q.order) r = r.order(q.order, { ascending: !!q.asc });
-    if (q.limit) r = r.limit(q.limit);
-    return check(await r);
+    const build = () => {
+      let r = sb.from(table).select("*");
+      for (const [k, v] of Object.entries(q.eq || {})) r = r.eq(k, v);
+      for (const [k, v] of Object.entries(q.gte || {})) r = r.gte(k, v);
+      for (const [k, v] of Object.entries(q.lt || {})) r = r.lt(k, v);
+      if (q.order) r = r.order(q.order, { ascending: !!q.asc });
+      return r;
+    };
+    if (q.limit) return check(await build().limit(q.limit));
+    // Die Schnittstelle liefert höchstens 1000 Zeilen je Abruf: seitenweise holen
+    const all = [];
+    for (let page = 0; page < 20; page++) {
+      const rows = check(await build().range(page * PAGE, page * PAGE + PAGE - 1));
+      all.push(...rows);
+      if (rows.length < PAGE) break;
+    }
+    return all;
   },
   async insert(table, row) {
     return check(await sb.from(table).insert(row).select().single());
@@ -150,18 +162,31 @@ function demoSeed() {
   });
   const weights = [];
   for (let i = 13; i >= 0; i--) weights.push({ day: addDays(today, -i), source: "manuell", kg: Math.round((90.6 - (13 - i) * 0.06 + (i % 3) * 0.1) * 10) / 10 });
+  // 150 Tage mit einem eingebauten Muster: mehr Schlaf, bessere Erholung
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
   const whoop = [];
-  for (let i = 13; i >= 1; i--)
+  const workouts = [];
+  for (let i = 150; i >= 1; i--) {
+    const bed = 22.6 + rnd() * 2.6;
+    const sleep = Math.max(3.5, Math.min(9, 8.6 - (bed - 22.6) * 0.8 + (rnd() - 0.5) * 1.6));
+    const strength = i % 7 === 1 || i % 7 === 3 || (i % 7 === 6 && i > 20);
+    const start = new Date(at(-i, 0));
+    start.setHours(Math.floor(bed) % 24, Math.round((bed % 1) * 60), 0, 0);
+    if (bed < 24) start.setDate(start.getDate() - 1);
     whoop.push({
       day: addDays(today, -i),
-      kcal_burned: 2850 + ((i * 37) % 300),
-      steps: 7200 + ((i * 911) % 4000),
-      recovery_score: 45 + ((i * 13) % 45),
-      sleep_hours: 6.2 + ((i * 7) % 18) / 10,
-      strain: 9 + ((i * 3) % 7),
-      hrv_ms: 48 + ((i * 5) % 20),
-      rhr: 56 + (i % 5),
+      kcal_burned: Math.round(2700 + rnd() * 400 + (strength ? 250 : 0)),
+      steps: Math.round(6500 + rnd() * 6000),
+      recovery_score: Math.round(Math.max(5, Math.min(98, 18 + sleep * 7.5 + (rnd() - 0.5) * 30))),
+      sleep_hours: Math.round(sleep * 100) / 100,
+      sleep_start: start.toISOString(),
+      strain: Math.round((7 + rnd() * 6 + (strength ? 3 : 0)) * 10) / 10,
+      hrv_ms: Math.round(40 + sleep * 3 + rnd() * 12),
+      rhr: Math.round(62 - sleep * 0.8 + rnd() * 4),
     });
+    if (strength) workouts.push({ id: uid(), start_at: at(-i, 8, 0), sport_name: "weightlifting", strain: 9.4 });
+  }
   return {
     settings: [{ user_id: "demo", start_weight_kg: 90, goal_weight_kg: 84, rate_kg_per_week: 0.5, plan_start: addDays(today, -13), pause_from: addDays(today, 60), pause_weeks: 4, window_start: "11:00", window_end: "19:00", protein_target_g: 150, kcal_target: null, timezone: "Europe/Berlin" }],
     meals: [
@@ -185,11 +210,7 @@ function demoSeed() {
     ],
     weights,
     whoop_daily: whoop,
-    whoop_workouts: [
-      { id: uid(), start_at: at(-1, 8, 0), sport_name: "weightlifting", strain: 9.4 },
-      { id: uid(), start_at: at(-3, 8, 0), sport_name: "weightlifting", strain: 10.1 },
-      { id: uid(), start_at: at(-6, 8, 0), sport_name: "weightlifting", strain: 8.8 },
-    ],
+    whoop_workouts: workouts,
     supplements: [
       { id: uid(), name: "Magnesiumbisglycinat", brand: "Beispiel", dose_text: "2 Kapseln abends", unit: "Kapsel", units_per_day: 2, ingredients: [{ name: "Magnesium", amount: 150, unit: "mg" }], additives: [], active: true, status: "done" },
       { id: uid(), name: "Vitamin D3 + K2", brand: "Beispiel", dose_text: "1 Tropfen morgens", unit: "Tropfen", units_per_day: 1, ingredients: [{ name: "Vitamin D3", amount: 25, unit: "µg" }], additives: [], active: true, status: "done" },
