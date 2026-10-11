@@ -3,7 +3,8 @@
 import { analyzeMeal, dayBand, eventRow, eventSheet, mealDetailSheet, mealRow, newMealSheet, photoButton } from "../components.js";
 import { api, loadRange } from "../data.js";
 import { addDays, dayKey, field, fmt, h, icon, openSheet, segmented, toast, mount } from "../lib.js";
-import { dayTotals, kcalTarget, targetWeight, weightSeries, windowStatus } from "../plan.js";
+import { dayTotals, inWindow, kcalTarget, targetWeight, weightSeries, windowStatus } from "../plan.js";
+import { BREAKFAST_BEFORE } from "../stats.js";
 
 const CRAVING_KEY = "suesslust-timer";
 const TIMER_MIN = 10;
@@ -215,6 +216,31 @@ export async function renderToday(root, ctx) {
         "scale",
       ),
     );
+  // Ja oder Nein. Ohne eigene Antwort gilt, was sich aus den Essensfotos ergibt.
+  const yesNo = (label, key, derived, hint) => {
+    const own = checkin[key];
+    const note = h("span", { class: "small muted" }, own == null && derived != null ? " (aus deinen Einträgen erkannt)" : ` (${hint})`);
+    return h(
+      "div",
+      { class: "check-row" },
+      h("span", {}, label, note),
+      segmented(
+        [
+          [true, "Ja"],
+          [false, "Nein"],
+        ],
+        own ?? derived ?? null,
+        (v) => {
+          note.textContent = ` (${hint})`;
+          saveCheckin({ [key]: v });
+        },
+        "scale yesno",
+      ),
+    );
+  };
+  const mealHours = meals.map((m) => new Date(m.eaten_at)).map((d) => d.getHours() + d.getMinutes() / 60);
+  const derivedBreakfast = meals.length ? Math.min(...mealHours) < BREAKFAST_BEFORE : null;
+  const derivedFasting = meals.length ? meals.every((m) => inWindow(s, m.eaten_at)) : null;
   const checkPanel = h(
     "div",
     { class: "panel" },
@@ -222,6 +248,8 @@ export async function renderToday(root, ctx) {
     scale("Heißhunger abends auf Süßes", "craving", "keiner"),
     scale("Juckende Hautstellen im Gesicht", "itch", "keine"),
     scale("Trockene Haut", "dry_skin", "nein"),
+    yesNo("Gefrühstückt", "breakfast", derivedBreakfast, `etwas mit Kalorien vor ${BREAKFAST_BEFORE} Uhr`),
+    yesNo("Essensfenster eingehalten", "fasting", derivedFasting, `nur zwischen ${String(s.window_start).slice(0, 5)} und ${String(s.window_end).slice(0, 5)} Uhr gegessen`),
   );
 
   // --------------------------------------------------------- Supplements

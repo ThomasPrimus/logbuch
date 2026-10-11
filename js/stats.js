@@ -6,6 +6,9 @@
 import { addDays, dayKey } from "./lib.js";
 import { dayTotals, groupBy, inWindow, isStrength } from "./plan.js";
 
+/** Frühstück heißt hier: etwas mit Kalorien vor dieser Uhrzeit. */
+export const BREAKFAST_BEFORE = 10;
+
 const num = (v) => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
 
 export const mean = (values) => {
@@ -166,14 +169,22 @@ export function buildDays(data, settings) {
       logged: true,
       kcalIn: t.count ? t.kcal : null,
       protein: t.count ? t.protein_g : null,
+      firstMeal: Math.min(...hours),
       lastMeal: Math.max(...hours),
-      allInWindow: settings ? (meals.every((m) => inWindow(settings, m.eaten_at)) ? 1 : 0) : null,
+      eatWindow: Math.max(...hours) - Math.min(...hours),
+      breakfast: Math.min(...hours) < BREAKFAST_BEFORE ? 1 : 0,
+      fasting: settings ? (meals.every((m) => inWindow(settings, m.eaten_at)) ? 1 : 0) : null,
       histHigh: meals.some((m) => m.histamine === "hoch") ? 1 : 0,
       dairy: has("milch"),
       alcohol: has("alkohol"),
       releaser: has("freisetzer"),
       leftovers: has("reste"),
     });
+  }
+  // Fastendauer über Nacht: von der letzten Mahlzeit des Vortags bis zur ersten des Tages
+  for (const [day, r] of rows) {
+    const before = rows.get(addDays(day, -1));
+    if (r.firstMeal != null && before?.lastMeal != null) r.fastHours = 24 - before.lastMeal + r.firstMeal;
   }
 
   const cravingDays = new Set();
@@ -186,12 +197,21 @@ export function buildDays(data, settings) {
   for (const c of checkins.values()) {
     if (Number(c.craving) >= 1) cravingDays.add(c.day);
     if (Number(c.itch) >= 1) itchDays.add(c.day);
+    // Die eigene Antwort im Tagescheck geht vor dem, was aus den Fotos abgeleitet ist
+    const r = get(c.day);
+    if (c.breakfast != null) r.breakfast = c.breakfast ? 1 : 0;
+    if (c.fasting != null) r.fasting = c.fasting ? 1 : 0;
   }
-  for (const day of new Set([...checkins.keys(), ...mealsByDay.keys()])) {
+  // Süßlust und Juckreiz gelten nur an Tagen als "nein", an denen danach gefragt oder Essen eingetragen wurde
+  for (const day of new Set([...checkins.keys(), ...mealsByDay.keys(), ...cravingDays, ...itchDays])) {
     const r = get(day);
-    r.craving = cravingDays.has(day) ? 1 : 0;
-    r.itch = itchDays.has(day) ? 1 : 0;
-    r.itch2 = itchDays.has(day) || itchDays.has(addDays(day, 1)) ? 1 : 0; // am selben oder am nächsten Tag
+    const c = checkins.get(day);
+    const logged = mealsByDay.has(day);
+    if (logged || c?.craving != null || cravingDays.has(day)) r.craving = cravingDays.has(day) ? 1 : 0;
+    if (logged || c?.itch != null || itchDays.has(day)) {
+      r.itch = itchDays.has(day) ? 1 : 0;
+      r.itch2 = itchDays.has(day) || itchDays.has(addDays(day, 1)) ? 1 : 0; // am selben oder am nächsten Tag
+    }
   }
   return rows;
 }

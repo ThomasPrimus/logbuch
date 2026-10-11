@@ -1091,3 +1091,8 @@ th.r {
   min-width: 3.5rem;
   text-align: right;
 }
+
+.scale.yesno {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 260px;
+}
