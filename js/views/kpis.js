@@ -134,6 +134,7 @@ const RELATIONS = [
     down: "niedriger ist die Erholung am Morgen",
     low: "Kürzeste Nächte",
     high: "Längste Nächte",
+    note: "Whoop rechnet den Schlaf selbst in die Erholung ein. Ein Teil dieses Zusammenhangs ist deshalb eingebaut.",
   },
   {
     title: "Einschlafzeit und Schlafdauer",
@@ -360,6 +361,7 @@ function relationCard(rel, res) {
     h("p", { class: found ? "statement-s" : "muted" }, verdict),
     chart,
     h("p", { class: "small muted" }, detail),
+    rel.note ? h("p", { class: "small muted" }, rel.note) : null,
   );
 }
 
