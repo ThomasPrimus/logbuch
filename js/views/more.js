@@ -682,7 +682,9 @@ export async function renderConnections(root, ctx, query) {
         class: "btn primary",
         type: "button",
         onclick: () => {
-          if (!keyState.value.trim()) return toast("Bitte den Schlüssel einfügen.");
+          const value = keyState.value.trim();
+          if (!value) return toast("Bitte den Schlüssel einfügen.");
+          if (!/^sk-ant-/.test(value)) return toast("Das ist kein Anthropic-Schlüssel. Er beginnt mit sk-ant-.");
           saveSecret([["ANTHROPIC_API_KEY", keyState.value]], "Schlüssel gespeichert");
         },
       },
@@ -699,7 +701,7 @@ export async function renderConnections(root, ctx, query) {
           "p",
           {},
           "Die Auswertung von Essens-, Etiketten- und Befundfotos läuft über die Anthropic-Schnittstelle. Dafür brauchst du einen eigenen Schlüssel aus der ",
-          h("a", { href: "https://console.anthropic.com", target: "_blank", rel: "noopener" }, "Claude Console"),
+          h("a", { href: "https://platform.claude.com/settings/keys", target: "_blank", rel: "noopener" }, "Claude Console"),
           ". Die Kosten liegen geschätzt bei 1 bis 2 Cent pro Foto.",
         ),
         h("p", { class: "small muted" }, "Der Schlüssel wird nur auf dem Server gespeichert und hier nie wieder angezeigt. Ohne Schlüssel kannst du schon loggen, die Einträge werden dann später ausgewertet."),
