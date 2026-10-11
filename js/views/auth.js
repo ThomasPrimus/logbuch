@@ -2,7 +2,11 @@
 // Zugang hat nur die freigegebene Adresse.
 
 import { api } from "../data.js";
-import { field, h, mount } from "../lib.js";
+import { field, h, mount, toast } from "../lib.js";
+
+// Eingebaute Browser von Apps (zum Beispiel der in der Claude-App). Google lässt
+// die Anmeldung dort nicht zu: Sie startet, kommt aber nie zurück.
+const EMBEDDED = /\bClaude\/|FBAN|FBAV|Instagram|Line\/|; wv\)/.test(navigator.userAgent);
 
 export function renderAuth(root) {
   const st = { email: "", password: "", pasted: "" };
@@ -29,7 +33,7 @@ export function renderAuth(root) {
     return msg;
   };
 
-  const google = h("button", { class: "btn primary big", type: "button" }, "Mit Google anmelden");
+  const google = h("button", { class: EMBEDDED ? "btn" : "btn primary big", type: "button" }, EMBEDDED ? "Trotzdem mit Google versuchen" : "Mit Google anmelden");
   google.addEventListener("click", () => guard(google, () => api.signInGoogle()));
 
   const email = h("input", { id: "auth-email", type: "email", autocomplete: "username", oninput: (e) => (st.email = e.target.value.trim()) });
@@ -94,9 +98,39 @@ export function renderAuth(root) {
         { class: "panel" },
         h("h1", {}, "Logbuch"),
         h("p", { class: "muted" }, "Essen, Schlaf, Training und Befinden an einem Ort."),
-        google,
-        message,
-        h("details", {}, h("summary", {}, "Ohne Google anmelden"), h("div", { style: "margin-top:16px" }, form)),
+        EMBEDDED
+          ? [
+              h(
+                "div",
+                { class: "note warn" },
+                h("strong", {}, "Google-Anmeldung geht in diesem Fenster nicht"),
+                h("span", {}, "Du hast die App im eingebauten Browser einer anderen App geöffnet. Google blockiert dort die Anmeldung. Öffne die Adresse in Chrome oder Safari, oder melde dich hier mit Passwort an."),
+                h(
+                  "div",
+                  {},
+                  h(
+                    "button",
+                    {
+                      class: "btn",
+                      type: "button",
+                      onclick: async () => {
+                        try {
+                          await navigator.clipboard.writeText(location.origin + location.pathname);
+                          toast("Adresse kopiert. In Chrome oder Safari einfügen.");
+                        } catch {
+                          toast(location.origin + location.pathname);
+                        }
+                      },
+                    },
+                    "Adresse der App kopieren",
+                  ),
+                ),
+              ),
+              message,
+              form,
+              google,
+            ]
+          : [google, message, h("details", {}, h("summary", {}, "Ohne Google anmelden"), h("div", { style: "margin-top:16px" }, form))],
       ),
     ),
   );
